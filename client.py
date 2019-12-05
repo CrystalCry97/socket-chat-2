@@ -1,8 +1,8 @@
 import sys
 from socket import socket, AF_INET, SOCK_DGRAM
 
-SERVER_IP   = '127.0.0.1'
-PORT_NUMBER = 5000
+SERVER_IP   = input("Please enter the server IP address: ")
+PORT_NUMBER = int(input("Please enter the server port: "))
 SIZE = 1024
 
 print ("Test client sending packets to IP {0}, via port {1}\n".format(SERVER_IP, PORT_NUMBER))
