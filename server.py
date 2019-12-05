@@ -1,38 +1,66 @@
-import sys
-from socket import socket, gethostbyname, AF_INET, SOCK_DGRAM
+# Tcp Chat server
 
-SERVER_IP   = '127.0.0.1'
-PORT_NUMBER = 5000
-SIZE = 1024
-LOCK = False
-LOCK_HOLDER = ""
+import socket, select
 
-hostName = gethostbyname( '0.0.0.0' )
+#Function to broadcast chat messages to all connected clients
+def broadcast_data (sock, message):
+	#Do not send the message to master socket and the client who has send us the message
+	for socket in CONNECTION_LIST:
+		if socket != server_socket and socket != sock :
+			try :
+				socket.send(message)
+			except :
+				# broken socket connection may be, chat client pressed ctrl+c for example
+				socket.close()
+				CONNECTION_LIST.remove(socket)
 
-mySocket = socket( AF_INET, SOCK_DGRAM )
-mySocket.bind( (hostName, PORT_NUMBER) )
+if __name__ == "__main__":
+	
+	# List to keep track of socket descriptors
+	CONNECTION_LIST = []
+	RECV_BUFFER = 4096 # Advisable to keep it as an exponent of 2
+	PORT = 5000
+	
+	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	# this has no effect, why ?
+	server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	server_socket.bind(("0.0.0.0", PORT))
+	server_socket.listen(10)
 
-print ("Test server listening on port {0}\n".format(PORT_NUMBER))
+	# Add server socket to the list of readable connections
+	CONNECTION_LIST.append(server_socket)
 
-while True:
-    (data,addr) = mySocket.recvfrom(SIZE)
-    print (data.decode())
-    if "getlock" in data.decode():
-        if LOCK == False:
-            LOCK = True
-            LOCK_HOLDER = data.decode().split(':')[0]
-            print(f"Server: {LOCK_HOLDER} get the lock")
-        else:
-            print (f"Server: {LOCK_HOLDER} took the lock. Please wait.")
-    elif "releaselock" in data.decode():
-        if LOCK_HOLDER == data.decode().split(':')[0]:
-            LOCK = False
-            print (f"Server: {LOCK_HOLDER} released the lock")
-            LOCK_HOLDER = ""
-        else:
-            # print(f"{LOCK_HOLDER} !== {data.decode().split(':')[0]}")
-            print (f"Server: {data.decode().split(':')[0]} not hold the lock")
+	print ("Chat server started on port " + str(PORT))
 
-    # msg = input("SERVER: ")
-    # mySocket.sendto(msg.encode(),(SERVER_IP,PORT_NUMBER))
-sys.exit()
+	while 1:
+		# Get the list sockets which are ready to be read through select
+		read_sockets,write_sockets,error_sockets = select.select(CONNECTION_LIST,[],[])
+
+		for sock in read_sockets:
+			#New connection
+			if sock == server_socket:
+				# Handle the case in which there is a new connection recieved through server_socket
+				sockfd, addr = server_socket.accept()
+				CONNECTION_LIST.append(sockfd)
+				print ("Client (%s, %s) connected" % addr)
+				
+				broadcast_data(sockfd, "[%s:%s] entered room\n" % addr)
+			
+			#Some incoming message from a client
+			else:
+				# Data recieved from client, process it
+				try:
+					#In Windows, sometimes when a TCP program closes abruptly,
+					# a "Connection reset by peer" exception will be thrown
+					data = sock.recv(RECV_BUFFER)
+					if data:
+						broadcast_data(sock, "\r" + '<' + str(sock.getpeername()) + '> ' + data.decode())                
+				
+				except:
+					broadcast_data(sock, "Client (%s, %s) is offline" % addr)
+					print ("Client (%s, %s) is offline" % addr)
+					sock.close()
+					CONNECTION_LIST.remove(sock)
+					continue
+	
+	server_socket.close()

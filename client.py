@@ -1,19 +1,53 @@
-import sys
-from socket import socket, AF_INET, SOCK_DGRAM
+# telnet program example
+import socket, select, string, sys
 
-SERVER_IP   = '127.0.0.1'
-PORT_NUMBER = 5000
-SIZE = 1024
+def prompt() :
+	sys.stdout.write('<You> ')
+	sys.stdout.flush()
 
-print ("Test client sending packets to IP {0}, via port {1}\n".format(SERVER_IP, PORT_NUMBER))
-
-mySocket = socket( AF_INET, SOCK_DGRAM )
-
-name = input("Please enter your name: ")
-
-while True:
-        msg = input(f"{name}: ")
-        mySocket.sendto(f"{name}: {msg}".encode(),(SERVER_IP,PORT_NUMBER))
-        # (data,addr) = mySocket.recvfrom(SIZE)
-        # print ("SERVER: " + data.decode())
-sys.exit()
+#main function
+if __name__ == "__main__":
+	
+	if(len(sys.argv) < 3) :
+		print ('Usage : python telnet.py hostname port')
+		sys.exit()
+	
+	host = sys.argv[1]
+	port = int(sys.argv[2])
+	
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.settimeout(2)
+	
+	# connect to remote host
+	try :
+		s.connect((host, port))
+	except :
+		print ('Unable to connect')
+		sys.exit()
+	
+	print ('Connected to remote host. Start sending messages')
+	prompt()
+	
+	while 1:
+		socket_list = [sys.stdin, s]
+		
+		# Get the list sockets which are readable
+		read_sockets, write_sockets, error_sockets = select.select(socket_list , [], [])
+		
+		for sock in read_sockets:
+			#incoming message from remote server
+			if sock == s:
+				data = sock.recv(4096)
+				if not data :
+					print ('\nDisconnected from chat server')
+					sys.exit()
+				else :
+					#print data
+					sys.stdout.write(data)
+					prompt()
+			
+			#user entered a message
+			else :
+				msg = sys.stdin.readline()
+				s.send(msg.encode())
+				prompt()
